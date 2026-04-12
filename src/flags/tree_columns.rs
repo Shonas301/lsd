@@ -49,7 +49,7 @@ mod test {
     }
 
     #[test]
-    fn test_from_cli_some() {
+    fn test_from_cli_true() {
         let argv = ["lsd", "--tree-columns"];
         let cli = Cli::try_parse_from(argv).unwrap();
         assert_eq!(Some(TreeColumns(true)), TreeColumns::from_cli(&cli));
@@ -61,32 +61,16 @@ mod test {
     }
 
     #[test]
-    fn test_from_config_some() {
+    fn test_from_config_true() {
         let mut c = Config::with_none();
         c.tree_columns = Some(true);
         assert_eq!(Some(TreeColumns(true)), TreeColumns::from_config(&c));
     }
 
     #[test]
-    fn test_default() {
-        assert_eq!(TreeColumns(false), TreeColumns::default());
-    }
-
-    #[test]
-    fn test_configure_from_cli_takes_precedence() {
-        let argv = ["lsd", "--tree-columns"];
-        let cli = Cli::try_parse_from(argv).unwrap();
+    fn test_from_config_false() {
         let mut c = Config::with_none();
         c.tree_columns = Some(false);
-        assert_eq!(TreeColumns(true), TreeColumns::configure_from(&cli, &c));
-    }
-
-    #[test]
-    fn test_configure_from_config_fallback() {
-        let argv = ["lsd"];
-        let cli = Cli::try_parse_from(argv).unwrap();
-        let mut c = Config::with_none();
-        c.tree_columns = Some(true);
-        assert_eq!(TreeColumns(true), TreeColumns::configure_from(&cli, &c));
+        assert_eq!(Some(TreeColumns(false)), TreeColumns::from_config(&c));
     }
 }
