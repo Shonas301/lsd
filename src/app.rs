@@ -205,6 +205,10 @@ pub struct Cli {
     #[arg(long, value_name = "NUM")]
     pub max_shown: Option<usize>,
 
+    /// pack top-level tree subtrees horizontally into terminal-width columns (requires --max-shown)
+    #[arg(long)]
+    pub tree_columns: bool,
+
     /// Print help information
     #[arg(long, action = ArgAction::Help)]
     help: (),
