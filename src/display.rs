@@ -1439,4 +1439,105 @@ mod tests {
             "found double blank lines in output:\n{output}"
         );
     }
+
+    #[test]
+    fn test_tree_columns_packs_horizontally() {
+        let argv = ["lsd", "--tree", "--max-shown", "2", "--tree-columns"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
+
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("alpha").create_dir_all().unwrap();
+        dir.child("alpha/a1.txt").touch().unwrap();
+        dir.child("alpha/a2.txt").touch().unwrap();
+        dir.child("beta").create_dir_all().unwrap();
+        dir.child("beta/b1.txt").touch().unwrap();
+        dir.child("beta/b2.txt").touch().unwrap();
+
+        let metas = Meta::from_path(Path::new(dir.path()), false, PermissionFlag::Rwx)
+            .unwrap()
+            .recurse_into(42, &flags, None)
+            .unwrap()
+            .0
+            .unwrap();
+        let output = tree(
+            &metas,
+            &flags,
+            &Colors::new(color::ThemeOption::NoColor),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
+        );
+
+        // both top-level dir names should appear on the same first line, separated by gutter.
+        let first_line = output.lines().next().expect("output has no lines");
+        assert!(
+            first_line.contains("alpha") && first_line.contains("beta"),
+            "first line should contain both top-level dirs, got: {first_line:?}"
+        );
+    }
+
+    #[test]
+    fn test_tree_columns_without_max_shown_falls_back() {
+        let argv = ["lsd", "--tree", "--tree-columns"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
+
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("alpha").create_dir_all().unwrap();
+        dir.child("beta").create_dir_all().unwrap();
+
+        let metas = Meta::from_path(Path::new(dir.path()), false, PermissionFlag::Rwx)
+            .unwrap()
+            .recurse_into(42, &flags, None)
+            .unwrap()
+            .0
+            .unwrap();
+        let output = tree(
+            &metas,
+            &flags,
+            &Colors::new(color::ThemeOption::NoColor),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
+        );
+
+        // fallback is vertical: each dir on its own line.
+        let alpha_line = output.lines().find(|l| l.contains("alpha")).unwrap();
+        assert!(
+            !alpha_line.contains("beta"),
+            "fallback should place dirs on separate lines, got: {alpha_line:?}"
+        );
+    }
+
+    #[test]
+    fn test_tree_columns_with_multiple_blocks_falls_back() {
+        // --long adds multiple blocks — blocks.len() > 1 triggers fallback.
+        let argv = ["lsd", "--tree", "--long", "--max-shown", "2", "--tree-columns"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
+
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("alpha").create_dir_all().unwrap();
+        dir.child("beta").create_dir_all().unwrap();
+
+        let metas = Meta::from_path(Path::new(dir.path()), false, PermissionFlag::Rwx)
+            .unwrap()
+            .recurse_into(42, &flags, None)
+            .unwrap()
+            .0
+            .unwrap();
+        let output = tree(
+            &metas,
+            &flags,
+            &Colors::new(color::ThemeOption::NoColor),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
+        );
+
+        // with --long the two dir names must not appear side-by-side on the same line.
+        let alpha_line = output.lines().find(|l| l.contains("alpha")).unwrap();
+        assert!(
+            !alpha_line.contains("beta"),
+            "--long should force vertical fallback, got: {alpha_line:?}"
+        );
+    }
 }
