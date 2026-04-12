@@ -15,6 +15,7 @@ const LINE: &str = "\u{2502}  "; // "│  "
 const CORNER: &str = "\u{2514}\u{2500}\u{2500}"; // "└──"
 const BLANK: &str = "   ";
 const INDENT_STEP: usize = 2;
+const TREE_COLUMN_GUTTER: usize = 2;
 
 pub fn grid(
     metas: &[Meta],
@@ -46,6 +47,16 @@ pub fn tree(
     icons: &Icons,
     git_theme: &GitTheme,
 ) -> String {
+    if flags.tree_columns.0 {
+        if flags.max_shown.0.is_none() {
+            eprintln!("lsd: --tree-columns requires --max-shown; falling back to vertical layout");
+        } else if flags.blocks.0.len() > 1 {
+            eprintln!("lsd: --tree-columns only supports name-only output; falling back to vertical layout");
+        } else {
+            return tree_columns(metas, flags, colors, icons, git_theme);
+        }
+    }
+
     let mut grid = Grid::new(GridOptions {
         filling: Filling::Spaces(1),
         direction: Direction::LeftToRight,
@@ -77,6 +88,125 @@ pub fn tree(
     }
 
     grid.fit_into_columns(flags.blocks.0.len()).to_string()
+}
+
+fn tree_columns(
+    metas: &[Meta],
+    flags: &Flags,
+    colors: &Colors,
+    icons: &Icons,
+    git_theme: &GitTheme,
+) -> String {
+    let owner_cache = OwnerCache::default();
+    let term_width = terminal_size().map(|(w, _)| w.0 as usize);
+    let hyperlink = flags.hyperlink == HyperlinkOption::Always;
+
+    // render each top-level meta as its own subtree block (Vec<String> of lines)
+    let blocks: Vec<Vec<String>> = metas
+        .iter()
+        .map(|meta| {
+            let single = std::slice::from_ref(meta);
+            let padding_rules = get_padding_rules(single, flags);
+
+            let mut grid = Grid::new(GridOptions {
+                filling: Filling::Spaces(1),
+                direction: Direction::LeftToRight,
+            });
+
+            for cell in inner_display_tree(
+                single,
+                &owner_cache,
+                flags,
+                colors,
+                icons,
+                git_theme,
+                (0, ""),
+                &padding_rules,
+                0,
+            ) {
+                grid.add(cell);
+            }
+
+            grid.fit_into_columns(flags.blocks.0.len())
+                .to_string()
+                .lines()
+                .map(str::to_string)
+                .collect()
+        })
+        .collect();
+
+    if blocks.is_empty() {
+        return String::new();
+    }
+
+    // measure each block's visible width (max visible width across its lines)
+    let widths: Vec<usize> = blocks
+        .iter()
+        .map(|lines| {
+            lines
+                .iter()
+                .map(|line| get_visible_width(line, hyperlink))
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+
+    // greedy pack: each row contains as many consecutive blocks as fit in term_width.
+    // when term_width is unknown, put all blocks on one row.
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    let mut current_row: Vec<usize> = Vec::new();
+    let mut current_width: usize = 0;
+
+    for (idx, &w) in widths.iter().enumerate() {
+        let added_width = if current_row.is_empty() {
+            w
+        } else {
+            TREE_COLUMN_GUTTER + w
+        };
+        let fits = match term_width {
+            Some(tw) => current_row.is_empty() || current_width + added_width <= tw,
+            None => true,
+        };
+        if fits {
+            current_row.push(idx);
+            current_width += added_width;
+        } else {
+            rows.push(std::mem::take(&mut current_row));
+            current_row.push(idx);
+            current_width = w;
+        }
+    }
+    if !current_row.is_empty() {
+        rows.push(current_row);
+    }
+
+    // for each row, pad each block's lines to its width, pad shorter blocks with
+    // blank lines up to tallest in row, then interleave horizontally.
+    let mut output = String::new();
+    let gutter = " ".repeat(TREE_COLUMN_GUTTER);
+
+    for row in rows {
+        let row_height = row.iter().map(|&i| blocks[i].len()).max().unwrap_or(0);
+
+        for line_idx in 0..row_height {
+            for (pos, &block_idx) in row.iter().enumerate() {
+                if pos > 0 {
+                    output.push_str(&gutter);
+                }
+                let block = &blocks[block_idx];
+                let w = widths[block_idx];
+                let line = block.get(line_idx).map(String::as_str).unwrap_or("");
+                output.push_str(line);
+                let line_visible = get_visible_width(line, hyperlink);
+                if line_visible < w {
+                    output.push_str(&" ".repeat(w - line_visible));
+                }
+            }
+            output.push('\n');
+        }
+    }
+
+    output
 }
 
 #[allow(clippy::too_many_arguments)] // should wrap flags, colors, icons, git_theme into one struct
