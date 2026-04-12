@@ -19,6 +19,7 @@ pub mod sorting;
 pub mod symlink_arrow;
 pub mod symlinks;
 pub mod total_size;
+pub mod tree_columns;
 pub mod tree_filter;
 pub mod truncate_owner;
 
@@ -48,6 +49,7 @@ pub use sorting::Sorting;
 pub use symlink_arrow::SymlinkArrow;
 pub use symlinks::NoSymlink;
 pub use total_size::TotalSize;
+pub use tree_columns::TreeColumns;
 pub use tree_filter::TreeFilter;
 pub use truncate_owner::TruncateOwner;
 
@@ -84,6 +86,7 @@ pub struct Flags {
     pub truncate_owner: TruncateOwner,
     pub max_shown: MaxShown,
     pub tree_filter: TreeFilter,
+    pub tree_columns: TreeColumns,
 }
 
 impl Flags {
@@ -117,6 +120,7 @@ impl Flags {
             truncate_owner: TruncateOwner::configure_from(cli, config),
             max_shown: MaxShown::configure_from(cli, config),
             tree_filter: TreeFilter::configure_from(cli, config)?,
+            tree_columns: TreeColumns::configure_from(cli, config),
         })
     }
 }

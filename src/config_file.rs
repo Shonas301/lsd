@@ -46,6 +46,7 @@ pub struct Config {
     pub truncate_owner: Option<TruncateOwner>,
     pub max_shown: Option<usize>,
     pub tree_filter: Option<Vec<String>>,
+    pub tree_columns: Option<bool>,
 }
 
 #[derive(Eq, PartialEq, Debug, Deserialize)]
@@ -133,6 +134,7 @@ impl Config {
             truncate_owner: None,
             max_shown: None,
             tree_filter: None,
+            tree_columns: None,
         }
     }
 
@@ -446,6 +448,7 @@ mod tests {
                 }),
                 max_shown: None,
                 tree_filter: None,
+                tree_columns: None,
             },
             c
         );
