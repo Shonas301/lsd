@@ -4,9 +4,9 @@
 use crate::app::Cli;
 use crate::config_file::Config;
 
+use super::glob_helpers::{create_glob, create_glob_set};
 use clap::Error;
-use clap::error::ErrorKind;
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::{GlobSet, GlobSetBuilder};
 
 /// the struct holding a [GlobSet] for inclusive tree filtering
 #[derive(Clone, Debug)]
@@ -46,7 +46,7 @@ impl TreeFilter {
         let mut builder = GlobSetBuilder::new();
 
         for value in &cli.tree_filter {
-            match Self::create_glob(value) {
+            match create_glob(value) {
                 Ok(glob) => {
                     builder.add(glob);
                 }
@@ -54,7 +54,7 @@ impl TreeFilter {
             }
         }
 
-        Some(Self::create_glob_set(&builder).map(Self))
+        Some(create_glob_set(&builder).map(Self))
     }
 
     /// Get a potential [TreeFilter] from a [Config].
@@ -67,7 +67,7 @@ impl TreeFilter {
         let mut builder = GlobSetBuilder::new();
 
         for glob in globs {
-            match Self::create_glob(glob) {
+            match create_glob(glob) {
                 Ok(glob) => {
                     builder.add(glob);
                 }
@@ -75,20 +75,9 @@ impl TreeFilter {
             }
         }
 
-        Some(Self::create_glob_set(&builder).map(Self))
+        Some(create_glob_set(&builder).map(Self))
     }
 
-    /// Create a [Glob] from a provided pattern.
-    fn create_glob(pattern: &str) -> Result<Glob, Error> {
-        Glob::new(pattern).map_err(|err| Error::raw(ErrorKind::ValueValidation, err))
-    }
-
-    /// Create a [GlobSet] from a provided [GlobSetBuilder].
-    fn create_glob_set(builder: &GlobSetBuilder) -> Result<GlobSet, Error> {
-        builder
-            .build()
-            .map_err(|err| Error::raw(ErrorKind::ValueValidation, err))
-    }
 }
 
 /// the default value of `TreeFilter` is the empty [GlobSet], returned by [GlobSet::empty()].

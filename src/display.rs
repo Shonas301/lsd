@@ -242,40 +242,35 @@ fn inner_display_tree(
 ) -> Vec<Cell> {
     let mut cells = Vec::new();
 
-    // apply tree filter if non-empty: dirs always shown, files must match a glob
-    let filtered_storage: Vec<Meta>;
-    let effective_metas: &[Meta] = if !flags.tree_filter.0.is_empty() {
-        filtered_storage = metas
+    // apply tree filter: dirs always shown, non-dirs must match a glob
+    let filtered: Vec<&Meta> = if !flags.tree_filter.0.is_empty() {
+        metas
             .iter()
             .filter(|m| {
                 matches!(m.file_type, FileType::Directory { .. })
                     || matches!(m.file_type, FileType::SymLink { is_dir: true })
                     || flags.tree_filter.0.is_match(m.name.file_name())
             })
-            .cloned()
-            .collect();
-        &filtered_storage
+            .collect()
     } else {
-        metas
+        metas.iter().collect()
     };
 
-    // truncate to max_shown, track remaining count for summary line
+    // truncate to max_shown
     let (display_metas, truncated) = if let Some(n) = flags.max_shown.0 {
-        if effective_metas.len() > n {
-            (&effective_metas[..n], effective_metas.len() - n)
+        if filtered.len() > n {
+            (&filtered[..n], filtered.len() - n)
         } else {
-            (effective_metas, 0usize)
+            (filtered.as_slice(), 0usize)
         }
     } else {
-        (effective_metas, 0usize)
+        (filtered.as_slice(), 0usize)
     };
 
     let last_idx = display_metas.len();
-    // when a summary row follows, no real entry is the last — all use EDGE
-    let has_summary = truncated > 0;
 
     for (idx, meta) in display_metas.iter().enumerate() {
-        let is_last = !has_summary && idx + 1 == last_idx;
+        let is_last = truncated == 0 && idx + 1 == last_idx;
         let current_prefix = if tree_depth_prefix.0 > 0 {
             if !is_last {
                 format!("{}{} ", tree_depth_prefix.1, EDGE)
@@ -328,26 +323,27 @@ fn inner_display_tree(
         }
     }
 
-    // emit summary row when items were truncated
-    if has_summary {
+    if truncated > 0 {
         let prefix = if tree_depth_prefix.0 > 0 {
             format!("{}{} ", tree_depth_prefix.1, CORNER)
         } else {
             tree_depth_prefix.1.to_string()
         };
-        let summary_name = format!("{}... and {} more", prefix, truncated);
-        let colored_summary = colors.colorize(&summary_name, &Elem::TreeEdge).to_string();
+        let summary_text = format!("{}... and {} more", prefix, truncated);
+        let colored_summary = colors.colorize(&summary_text, &Elem::TreeEdge).to_string();
 
         for i in 0..flags.blocks.0.len() {
-            let content = if i == tree_index {
-                colored_summary.clone()
+            if i == tree_index {
+                cells.push(Cell {
+                    width: get_visible_width(&colored_summary, flags.hyperlink == HyperlinkOption::Always),
+                    contents: colored_summary.clone(),
+                });
             } else {
-                String::new()
-            };
-            cells.push(Cell {
-                width: get_visible_width(&content, flags.hyperlink == HyperlinkOption::Always),
-                contents: content,
-            });
+                cells.push(Cell {
+                    width: 0,
+                    contents: String::new(),
+                });
+            }
         }
     }
 

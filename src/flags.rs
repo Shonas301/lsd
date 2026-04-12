@@ -3,6 +3,7 @@ pub mod color;
 pub mod date;
 pub mod dereference;
 pub mod display;
+mod glob_helpers;
 pub mod header;
 pub mod hyperlink;
 pub mod icons;
