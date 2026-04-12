@@ -155,9 +155,13 @@ fn inner_display_grid(
     let content_prefix = " ".repeat(content_indent);
 
     let grid_str = if flags.layout == Layout::Grid {
-        // reduce available width to account for content indentation
-        let adjusted_width = term_width.map(|w| w.saturating_sub(content_indent));
-        if let Some(tw) = adjusted_width {
+        // only reduce available width when content will be indented (depth > 0)
+        let effective_width = if depth > 0 {
+            term_width.map(|w| w.saturating_sub(content_indent))
+        } else {
+            term_width
+        };
+        if let Some(tw) = effective_width {
             if let Some(gridded_output) = grid.fit_into_width(tw) {
                 gridded_output.to_string()
             } else {
