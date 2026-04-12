@@ -77,7 +77,6 @@ impl TreeFilter {
 
         Some(create_glob_set(&builder).map(Self))
     }
-
 }
 
 /// the default value of `TreeFilter` is the empty [GlobSet], returned by [GlobSet::empty()].
