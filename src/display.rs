@@ -51,7 +51,9 @@ pub fn tree(
         if flags.max_shown.0.is_none() {
             eprintln!("lsd: --tree-columns requires --max-shown; falling back to vertical layout");
         } else if flags.blocks.0.len() > 1 {
-            eprintln!("lsd: --tree-columns only supports name-only output; falling back to vertical layout");
+            eprintln!(
+                "lsd: --tree-columns only supports name-only output; falling back to vertical layout"
+            );
         } else {
             return tree_columns(metas, flags, colors, icons, git_theme);
         }
@@ -304,7 +306,8 @@ fn inner_display_grid(
     if depth > 0 {
         let content_prefix = " ".repeat((depth + 1) * INDENT_STEP);
         let has_trailing_newline = grid_str.ends_with('\n');
-        let mut indented = String::with_capacity(grid_str.len() + grid_str.lines().count() * content_prefix.len());
+        let mut indented =
+            String::with_capacity(grid_str.len() + grid_str.lines().count() * content_prefix.len());
         for (i, line) in grid_str.lines().enumerate() {
             if i > 0 {
                 indented.push('\n');
@@ -492,7 +495,10 @@ fn inner_display_tree(
         for i in 0..flags.blocks.0.len() {
             if i == tree_index {
                 cells.push(Cell {
-                    width: get_visible_width(&colored_summary, flags.hyperlink == HyperlinkOption::Always),
+                    width: get_visible_width(
+                        &colored_summary,
+                        flags.hyperlink == HyperlinkOption::Always,
+                    ),
                     contents: colored_summary.clone(),
                 });
             } else {
@@ -1276,7 +1282,10 @@ mod tests {
 
         assert!(output.contains("main.rs"), "matching file should be shown");
         assert!(output.contains("subdir"), "dirs should always be shown");
-        assert!(!output.contains("readme.md"), "non-matching file should be hidden");
+        assert!(
+            !output.contains("readme.md"),
+            "non-matching file should be hidden"
+        );
     }
 
     #[test]
@@ -1307,8 +1316,14 @@ mod tests {
         );
 
         // c.md excluded by filter; a.rs shown; b.rs in "... and 1 more"
-        assert!(!output.contains("c.md"), "non-matching file should be hidden");
-        assert!(output.contains("... and 1 more"), "summary should reflect filtered count");
+        assert!(
+            !output.contains("c.md"),
+            "non-matching file should be hidden"
+        );
+        assert!(
+            output.contains("... and 1 more"),
+            "summary should reflect filtered count"
+        );
     }
 
     #[test]
@@ -1511,7 +1526,14 @@ mod tests {
     #[test]
     fn test_tree_columns_with_multiple_blocks_falls_back() {
         // --long adds multiple blocks — blocks.len() > 1 triggers fallback.
-        let argv = ["lsd", "--tree", "--long", "--max-shown", "2", "--tree-columns"];
+        let argv = [
+            "lsd",
+            "--tree",
+            "--long",
+            "--max-shown",
+            "2",
+            "--tree-columns",
+        ];
         let cli = Cli::try_parse_from(argv).unwrap();
         let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
 
