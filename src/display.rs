@@ -129,7 +129,8 @@ fn tree_columns(
                 grid.add(cell);
             }
 
-            grid.fit_into_columns(flags.blocks.0.len())
+            // blocks.len() is 1 per tree() precondition
+            grid.fit_into_columns(1)
                 .to_string()
                 .lines()
                 .map(str::to_string)
