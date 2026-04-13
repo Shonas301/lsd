@@ -221,11 +221,33 @@ fn tree_columns(
     }
 
     // for each row, pad each block's lines to its width, pad shorter blocks with
-    // blank lines up to tallest in row, then interleave horizontally.
+    // blank lines up to tallest in row, then interleave horizontally. between
+    // rows draw a horizontal rule so wrapped output reads as distinct strips.
     let mut output = String::new();
     let gutter = " ".repeat(TREE_COLUMN_GUTTER);
 
-    for row in rows {
+    // uniform divider width = the widest row, so the rule spans all wrapped content
+    // instead of tracking each row's narrower width.
+    let divider_width = rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .enumerate()
+                .map(|(pos, &i)| widths[i] + if pos > 0 { TREE_COLUMN_GUTTER } else { 0 })
+                .sum::<usize>()
+        })
+        .max()
+        .unwrap_or(0);
+    let divider = colors
+        .colorize(&"\u{2500}".repeat(divider_width), &Elem::TreeEdge)
+        .to_string();
+
+    for (row_idx, row) in rows.iter().enumerate() {
+        if row_idx > 0 {
+            output.push_str(&divider);
+            output.push('\n');
+        }
+
         let row_height = row.iter().map(|&i| blocks[i].len()).max().unwrap_or(0);
 
         for line_idx in 0..row_height {
