@@ -55,6 +55,24 @@ pub fn tree(
                 "lsd: --tree-columns only supports name-only output; falling back to vertical layout"
             );
         } else {
+            // common case: user passed a single directory arg. in tree mode fetch()
+            // produces one top-level meta wrapping the dir, so packing collapses to
+            // one column. unwrap the root and pack its children instead, printing
+            // the root name as a header line above the packed columns.
+            if metas.len() == 1 {
+                if let Some(children) = metas[0].content.as_deref() {
+                    if !children.is_empty() {
+                        let header =
+                            render_tree_root_header(&metas[0], flags, colors, icons, git_theme);
+                        let packed = tree_columns(children, flags, colors, icons, git_theme);
+                        return if header.is_empty() {
+                            packed
+                        } else {
+                            format!("{header}\n{packed}")
+                        };
+                    }
+                }
+            }
             return tree_columns(metas, flags, colors, icons, git_theme);
         }
     }
@@ -210,6 +228,35 @@ fn tree_columns(
     }
 
     output
+}
+
+// render just the root meta's name line (no children, no connectors), used as a
+// header above horizontally packed subtrees when tree_columns() unwraps a single
+// top-level directory. blocks is enforced len==1 by the caller.
+fn render_tree_root_header(
+    meta: &Meta,
+    flags: &Flags,
+    colors: &Colors,
+    icons: &Icons,
+    git_theme: &GitTheme,
+) -> String {
+    let single = std::slice::from_ref(meta);
+    let padding_rules = get_padding_rules(single, flags);
+    let owner_cache = OwnerCache::default();
+    get_output(
+        meta,
+        &owner_cache,
+        colors,
+        icons,
+        git_theme,
+        flags,
+        &DisplayOption::FileName,
+        &padding_rules,
+        (0, ""),
+    )
+    .into_iter()
+    .next()
+    .unwrap_or_default()
 }
 
 #[allow(clippy::too_many_arguments)] // should wrap flags, colors, icons, git_theme into one struct
@@ -1561,6 +1608,83 @@ mod tests {
         assert!(
             !alpha_line.contains("beta"),
             "--long should force vertical fallback, got: {alpha_line:?}"
+        );
+    }
+
+    #[test]
+    fn test_tree_columns_single_dir_packs_children() {
+        // mirrors real CLI: core.rs fetch() wraps a single dir arg in one top-level
+        // meta whose content holds the children. tree() should unwrap and pack.
+        let argv = ["lsd", "--tree", "--max-shown", "2", "--tree-columns"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
+
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("alpha").create_dir_all().unwrap();
+        dir.child("alpha/a1.txt").touch().unwrap();
+        dir.child("beta").create_dir_all().unwrap();
+        dir.child("beta/b1.txt").touch().unwrap();
+        dir.child("gamma").create_dir_all().unwrap();
+        dir.child("gamma/g1.txt").touch().unwrap();
+
+        let mut root = Meta::from_path(Path::new(dir.path()), false, PermissionFlag::Rwx).unwrap();
+        let (content, _) = root.recurse_into(42, &flags, None).unwrap();
+        root.content = content;
+        let metas = vec![root];
+
+        let output = tree(
+            &metas,
+            &flags,
+            &Colors::new(color::ThemeOption::NoColor),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
+        );
+
+        let mut lines = output.lines();
+        let header = lines.next().expect("output has no header line");
+        // header should be the root dir basename only, not any of the children.
+        assert!(
+            !header.contains("alpha") && !header.contains("beta") && !header.contains("gamma"),
+            "header should contain only the root dir name, got: {header:?}"
+        );
+        // next non-empty line should pack all three child dirs side-by-side.
+        let packed_line = lines
+            .find(|l| !l.trim().is_empty())
+            .expect("no packed line after header");
+        assert!(
+            packed_line.contains("alpha")
+                && packed_line.contains("beta")
+                && packed_line.contains("gamma"),
+            "packed line should contain all three children, got: {packed_line:?}"
+        );
+    }
+
+    #[test]
+    fn test_tree_columns_single_empty_dir_no_panic() {
+        // an empty dir as single arg should not panic — falls through to the
+        // len==1 tree_columns path which handles single-block output.
+        let argv = ["lsd", "--tree", "--max-shown", "2", "--tree-columns"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
+
+        let dir = assert_fs::TempDir::new().unwrap();
+
+        let mut root = Meta::from_path(Path::new(dir.path()), false, PermissionFlag::Rwx).unwrap();
+        let (content, _) = root.recurse_into(42, &flags, None).unwrap();
+        root.content = content;
+        let metas = vec![root];
+
+        let output = tree(
+            &metas,
+            &flags,
+            &Colors::new(color::ThemeOption::NoColor),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
+        );
+
+        assert!(
+            !output.is_empty(),
+            "empty-dir case should still print the root name"
         );
     }
 }
