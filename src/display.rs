@@ -47,8 +47,13 @@ pub fn tree(
     icons: &Icons,
     git_theme: &GitTheme,
 ) -> String {
+    // resolve once at entry — Auto mode reads the top-level entry count and uses
+    // that cap at every depth. see MaxShown::resolve.
+    let top_count = compute_top_count(metas);
+    let max_cap = flags.max_shown.resolve(top_count);
+
     if flags.tree_columns.0 {
-        if flags.max_shown.0.is_none() {
+        if !flags.max_shown.is_set() {
             eprintln!("lsd: --tree-columns requires --max-shown; falling back to vertical layout");
         } else if flags.blocks.0.len() > 1 {
             eprintln!(
@@ -64,7 +69,8 @@ pub fn tree(
                     if !children.is_empty() {
                         let header =
                             render_tree_root_header(&metas[0], flags, colors, icons, git_theme);
-                        let packed = tree_columns(children, flags, colors, icons, git_theme);
+                        let packed =
+                            tree_columns(children, flags, colors, icons, git_theme, max_cap);
                         return if header.is_empty() {
                             packed
                         } else {
@@ -73,7 +79,7 @@ pub fn tree(
                     }
                 }
             }
-            return tree_columns(metas, flags, colors, icons, git_theme);
+            return tree_columns(metas, flags, colors, icons, git_theme, max_cap);
         }
     }
 
@@ -103,11 +109,22 @@ pub fn tree(
         (0, ""),
         &padding_rules,
         index,
+        max_cap,
     ) {
         grid.add(cell);
     }
 
     grid.fit_into_columns(flags.blocks.0.len()).to_string()
+}
+
+// top-level entry count used to resolve MaxShown::Auto.
+// single-arg directory: use its immediate children. otherwise: number of cli args.
+fn compute_top_count(metas: &[Meta]) -> usize {
+    if metas.len() == 1 {
+        metas[0].content.as_deref().map_or(1, |c| c.len())
+    } else {
+        metas.len()
+    }
 }
 
 fn tree_columns(
@@ -116,6 +133,7 @@ fn tree_columns(
     colors: &Colors,
     icons: &Icons,
     git_theme: &GitTheme,
+    max_cap: Option<usize>,
 ) -> String {
     let owner_cache = OwnerCache::default();
     let term_width = terminal_size().map(|(w, _)| w.0 as usize);
@@ -143,6 +161,7 @@ fn tree_columns(
                 (0, ""),
                 &padding_rules,
                 0,
+                max_cap,
             ) {
                 grid.add(cell);
             }
@@ -447,6 +466,7 @@ fn inner_display_tree(
     tree_depth_prefix: (usize, &str),
     padding_rules: &HashMap<Block, usize>,
     tree_index: usize,
+    max_cap: Option<usize>,
 ) -> Vec<Cell> {
     let mut cells = Vec::new();
 
@@ -464,8 +484,8 @@ fn inner_display_tree(
         metas.iter().collect()
     };
 
-    // truncate to max_shown
-    let (display_metas, truncated) = if let Some(n) = flags.max_shown.0 {
+    // truncate to the resolved max cap (handles both MaxShown::Count and Auto)
+    let (display_metas, truncated) = if let Some(n) = max_cap {
         if filtered.len() > n {
             (&filtered[..n], filtered.len() - n)
         } else {
@@ -527,6 +547,7 @@ fn inner_display_tree(
                 (tree_depth_prefix.0 + 1, &new_prefix),
                 padding_rules,
                 tree_index,
+                max_cap,
             ));
         }
     }
@@ -1299,6 +1320,88 @@ mod tests {
         assert!(output.contains("... and 2 more"), "summary line missing");
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines.len(), 3, "expected 2 items + summary line");
+    }
+
+    #[test]
+    fn test_tree_with_max_shown_auto_uses_top_count() {
+        // --max-shown -1 → Auto → cap = top-level entry count.
+        // top has 3 items; subdir has 5 → should truncate to 3 with summary line.
+        let argv = ["lsd", "--tree", "--max-shown", "-1"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
+
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("a.txt").touch().unwrap();
+        dir.child("b.txt").touch().unwrap();
+        dir.child("sub").create_dir_all().unwrap();
+        dir.child("sub/s1").touch().unwrap();
+        dir.child("sub/s2").touch().unwrap();
+        dir.child("sub/s3").touch().unwrap();
+        dir.child("sub/s4").touch().unwrap();
+        dir.child("sub/s5").touch().unwrap();
+
+        let mut root = Meta::from_path(Path::new(dir.path()), false, PermissionFlag::Rwx).unwrap();
+        let (content, _) = root.recurse_into(42, &flags, None).unwrap();
+        root.content = content;
+        let mut metas = vec![root];
+        sort(&mut metas, &sort::assemble_sorters(&flags));
+
+        let output = tree(
+            &metas,
+            &flags,
+            &Colors::new(color::ThemeOption::NoColor),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
+        );
+
+        // top count is 3 (a.txt, b.txt, sub), so subdir with 5 children truncates to 3 → "... and 2 more"
+        assert!(
+            output.contains("... and 2 more"),
+            "subdir should be truncated to top-level count (3), leaving 2 hidden. output:\n{output}"
+        );
+        // all 3 top-level entries should still appear (top-level count == cap so nothing truncated there)
+        assert!(output.contains("a.txt"), "missing a.txt");
+        assert!(output.contains("b.txt"), "missing b.txt");
+        assert!(output.contains("sub"), "missing sub");
+    }
+
+    #[test]
+    fn test_tree_columns_auto_max_shown_satisfies_gate() {
+        // --max-shown -1 should count as "set" for the tree-columns gate.
+        let argv = ["lsd", "--tree", "--max-shown", "-1", "--tree-columns"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
+
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("alpha").create_dir_all().unwrap();
+        dir.child("alpha/a1").touch().unwrap();
+        dir.child("beta").create_dir_all().unwrap();
+        dir.child("beta/b1").touch().unwrap();
+        dir.child("gamma").create_dir_all().unwrap();
+        dir.child("gamma/g1").touch().unwrap();
+
+        let mut root = Meta::from_path(Path::new(dir.path()), false, PermissionFlag::Rwx).unwrap();
+        let (content, _) = root.recurse_into(42, &flags, None).unwrap();
+        root.content = content;
+        let metas = vec![root];
+
+        let output = tree(
+            &metas,
+            &flags,
+            &Colors::new(color::ThemeOption::NoColor),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
+        );
+
+        // gate passed → children packed horizontally below the root header
+        let packed_line = output
+            .lines()
+            .find(|l| l.contains("alpha") && l.contains("beta") && l.contains("gamma"))
+            .unwrap_or_else(|| panic!("expected packed line with all three children. got:\n{output}"));
+        assert!(
+            !packed_line.is_empty(),
+            "packed line should not be empty, got:\n{output}"
+        );
     }
 
     #[test]

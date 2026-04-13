@@ -201,9 +201,9 @@ pub struct Cli {
     #[arg(long, value_name = "GLOB")]
     pub tree_filter: Vec<String>,
 
-    /// max items to show per directory level in tree layout
-    #[arg(long, value_name = "NUM")]
-    pub max_shown: Option<usize>,
+    /// max items to show per directory level in tree layout (negative = auto, matches top-level entry count)
+    #[arg(long, value_name = "NUM", allow_hyphen_values = true)]
+    pub max_shown: Option<i64>,
 
     /// pack top-level tree subtrees horizontally into terminal-width columns (requires --max-shown)
     #[arg(long)]
