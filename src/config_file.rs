@@ -44,7 +44,7 @@ pub struct Config {
     pub header: Option<bool>,
     pub literal: Option<bool>,
     pub truncate_owner: Option<TruncateOwner>,
-    pub max_shown: Option<usize>,
+    pub max_shown: Option<i64>,
     pub tree_filter: Option<Vec<String>>,
     pub tree_columns: Option<bool>,
 }
