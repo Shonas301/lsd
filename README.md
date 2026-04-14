@@ -85,6 +85,48 @@ cargo install --git https://github.com/lsd-rs/lsd.git --branch main
 ### Installing binaries directly
 The [release page](https://github.com/lsd-rs/lsd/releases) includes precompiled binaries for Linux, macOS, and Windows for every release. You can also get the latest binary of the `main` branch from the [GitHub action build artifacts](https://github.com/lsd-rs/lsd/actions?query=branch%3Amain+is%3Asuccess+event%3Apush) (choose the top action and then scroll down to the artifacts section).
 
+#### Quick install via curl (this fork)
+One-liners that fetch the latest fork release (which includes the extra tree/recursion flags not yet upstream) and install it to `~/.local/bin` — no `sudo` required. Bump `VER` to a different [fork release tag](https://github.com/Shonas301/lsd/releases) if needed. Ensure `~/.local/bin` is on your `PATH`.
+
+<details>
+<summary>macOS — Apple Silicon (arm64)</summary>
+
+```sh
+VER=v1.2.0-tree-phase2 ARCH=aarch64-apple-darwin && \
+  mkdir -p ~/.local/bin && \
+  curl -L -o ~/.local/bin/lsd https://github.com/Shonas301/lsd/releases/download/$VER/lsd-$VER-$ARCH && \
+  chmod +x ~/.local/bin/lsd
+```
+</details>
+
+<details>
+<summary>macOS — Intel (x86_64)</summary>
+
+```sh
+VER=v1.2.0-tree-phase2 ARCH=x86_64-apple-darwin && \
+  mkdir -p ~/.local/bin && \
+  curl -L -o ~/.local/bin/lsd https://github.com/Shonas301/lsd/releases/download/$VER/lsd-$VER-$ARCH && \
+  chmod +x ~/.local/bin/lsd
+```
+</details>
+
+<details>
+<summary>Windows — x86_64 (PowerShell)</summary>
+
+```powershell
+$ver = "v1.2.0-tree-phase2"; $arch = "x86_64-pc-windows-gnu"
+$dir = "$env:USERPROFILE\.local\bin"
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+curl.exe -L -o "$dir\lsd.exe" "https://github.com/Shonas301/lsd/releases/download/$ver/lsd-$ver-$arch.exe"
+# add $dir to your user PATH if not already
+```
+</details>
+
+> Linux users: no prebuilt binaries are published on the fork yet. Build from source:
+> ```sh
+> cargo install --git https://github.com/Shonas301/lsd.git --branch main
+> ```
+
 #### Configuring your shell to use lsd instead of ls (optional)
 In order to use lsd instead of entering the `ls` command, you need to create an alias for ls in to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc...). The simplest variant of such an alias is:
 ```sh
